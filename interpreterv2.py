@@ -46,6 +46,23 @@ class Interpreter(InterpreterBase):
                 self.__call_func(statement)
             elif statement.elem_type == "=":
                 self.__assign(statement)
+            elif statement.elem_type == "if":
+                ifVal = self.__eval_expr(statement.dict["condition"])
+                if ifVal:
+                    for ifStatement in statement.dict["statements"]:
+                        self.__run_statements(ifStatement)
+                else:
+                    for elseStatement in statement.dict["else_statements"]:
+                        self.__run_statements(elseStatement)
+            elif statement.elem_type == "while":
+                while self.__eval_expr(statement.dict["condition"]):
+                    for whileStatment in statement.dict["statements"]:
+                        self.__run_statements(whileStatment)
+            elif statement.elem_type == "return":
+                if statement.dict["expression"] == Type.NIL:
+                    return None
+                else:
+                    return self.__eval_expr(statement.dict["expression"])
 
         return Interpreter.NIL_VALUE
 
@@ -137,4 +154,52 @@ class Interpreter(InterpreterBase):
         self.op_to_lambda[Type.INT]["-"] = lambda x, y: Value(
             x.type(), x.value() - y.value()
         )
+        self.op_to_lambda[Type.INT]["*"] = lambda x, y: Value(
+            x.type(), x.value() * y.value()
+        )
+        self.op_to_lambda[Type.INT]["/"] = lambda x, y: Value(
+            x.type(), x.value() // y.value()
+        )
+        self.op_to_lambda[Type.INT]["-"] = lambda x: Value(x.type(), -x.value())
+        self.op_to_lambda[Type.INT]["=="] = lambda x, y: Value(
+            x.type(), x.value() == y.value()
+        )
+        self.op_to_lambda[Type.INT]["!="] = lambda x, y: Value(
+            x.type(), x.value() != y.value()
+        )
+        self.op_to_lambda[Type.INT]["<"] = lambda x, y: Value(
+            x.type(), x.value() < y.value()
+        )
+        self.op_to_lambda[Type.INT]["<="] = lambda x, y: Value(
+            x.type(), x.value() <= y.value()
+        )
+        self.op_to_lambda[Type.INT][">"] = lambda x, y: Value(
+            x.type(), x.value() > y.value()
+        )
+        self.op_to_lambda[Type.INT][">="] = lambda x, y: Value(
+            x.type(), x.value() >= y.value()
+        )
+        self.op_to_lambda[Type.BOOL]["||"] = lambda x, y: Value(
+            x.type(), x.value() or y.value()
+        )
+        self.op_to_lambda[Type.BOOL]["&&"] = lambda x, y: Value(
+            x.type(), x.value() and y.value()
+        )
+        self.op_to_lambda[Type.BOOL]["!"] = lambda x: Value(x.type(), not x.value())
+        self.op_to_lambda[Type.BOOL]["=="] = lambda x, y: Value(
+            x.type(), x.value() == y.value()
+        )
+        self.op_to_lambda[Type.BOOL]["!="] = lambda x, y: Value(
+            x.type(), x.value() != y.value()
+        )
+        self.op_to_lambda[Type.STRING]["+"] = lambda x, y: Value(
+            x.type(), x.value() + y.value()
+        )
+        self.op_to_lambda[Type.STRING]["=="] = lambda x, y: Value(
+            x.type(), x.value() == y.value()
+        )
+        self.op_to_lambda[Type.STRING]["!="] = lambda x, y: Value(
+            x.type(), x.value() != y.value()
+        )
+
         # add other operators here later for int, string, bool, etc
