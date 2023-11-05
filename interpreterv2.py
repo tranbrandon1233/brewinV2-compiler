@@ -8,6 +8,8 @@ from brewparse import parse_program
 class Interpreter(InterpreterBase):
     # constants
     NIL_VALUE = create_value(InterpreterBase.NIL_DEF)
+    TRUE_VALUE = create_value(InterpreterBase.TRUE_DEF)
+    FALSE_VALUE = create_value(InterpreterBase.FALSE_DEF)
     BIN_OPS = {"+", "-"}
 
     # methods
@@ -46,7 +48,7 @@ class Interpreter(InterpreterBase):
                 self.__call_func(statement)
             elif statement.elem_type == "=":
                 self.__assign(statement)
-            elif statement.elem_type == "if":
+            elif statement.elem_type == InterpreterBase.IF_DEF:
                 ifVal = self.__eval_expr(statement.dict["condition"])
                 if ifVal:
                     for ifStatement in statement.dict["statements"]:
@@ -54,12 +56,12 @@ class Interpreter(InterpreterBase):
                 else:
                     for elseStatement in statement.dict["else_statements"]:
                         self.__run_statements(elseStatement)
-            elif statement.elem_type == "while":
+            elif statement.elem_type == InterpreterBase.WHILE_DEF:
                 while self.__eval_expr(statement.dict["condition"]):
                     for whileStatment in statement.dict["statements"]:
                         self.__run_statements(whileStatment)
-            elif statement.elem_type == "return":
-                if statement.dict["expression"] == Type.NIL:
+            elif statement.elem_type == InterpreterBase.RETURN_DEF:
+                if statement.dict["expression"] == Interpreter.NIL_VALUE:
                     return None
                 else:
                     return self.__eval_expr(statement.dict["expression"])
@@ -73,28 +75,37 @@ class Interpreter(InterpreterBase):
         if func_name == "inputi":
             return self.__call_input(call_node)
         else:
-            return self.__call_func(call_node)
+            return self.__call_new_func(call_node)
 
         # add code here later to call other functions
         super().error(ErrorType.NAME_ERROR, f"Function {func_name} not found")
 
     def __call_print(self, call_ast):
         output = ""
-        for arg in call_ast.get("args"):
-            result = self.__eval_expr(arg.dict["name"])  # result is a Value object
-            output = output + get_printable(result)
+        for arg in call_ast.dict["args"]:
+            if arg.elem_type == InterpreterBase.ARG_DEF:
+                result = self.__eval_expr(arg.dict["name"])  # result is a Value object
+                output = output + get_printable(result)
         super().output(output)
         return Interpreter.NIL_VALUE
 
-    def __call_func(self, call_ast):
+    def __call_new_func(self, call_ast):
         for arg in call_ast.dict["args"]:
-            self.args.append(call_ast.get(arg.dict["name"]))  # result is a Value object
+            if arg.elem_type == InterpreterBase.ARG_DEF:
+                self.__assign(arg.dict["name"])  # result is a Value object
         self.__run_statements(call_ast)
-        self.args = []  # Clear args
-        return Interpreter.NIL_VALUE
+        for arg in call_ast.dict["args"]:  # Clear arguments
+            if arg.elem_type == InterpreterBase.ARG_DEF:
+                self.env.set(
+                    call_ast.get(arg.dict["name"]), Interpreter.NIL_VALUE
+                )  # result is a Value object
+            return Interpreter.NIL_VALUE
 
     def __call_input(self, call_ast):
-        args = call_ast.get("args")
+        args = []
+        for arg in call_ast.dict["args"]:
+            if arg.elem_type == InterpreterBase.ARG_DEF:
+                args.append(arg)
         if args is not None and len(args) == 1:
             result = self.__eval_expr(args[0])
             super().output(get_printable(result))
@@ -131,25 +142,46 @@ class Interpreter(InterpreterBase):
             return self.__eval_op(expr_ast)
 
     def __eval_op(self, arith_ast):
-        left_value_obj = self.__eval_expr(arith_ast.get("op1"))
-        right_value_obj = self.__eval_expr(arith_ast.get("op2"))
-        if left_value_obj.type() != right_value_obj.type():
-            super().error(
-                ErrorType.TYPE_ERROR,
-                f"Incompatible types for {arith_ast.elem_type} operation",
-            )
-        if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
-            super().error(
-                ErrorType.TYPE_ERROR,
-                f"Incompatible operator {arith_ast.get_type} for type {left_value_obj.type()}",
-            )
-        f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
+        if arith_ast.elem_type == "neg":
+            try:
+                obj = self.__eval_expr(arith_ast.get("op1"))
+                return -obj
+            except:
+                super().error(
+                    ErrorType.TYPE_ERROR,
+                    f"Incompatible type for {arith_ast.elem_type} operation",
+                )
+        if arith_ast.elem_type == "!":
+            try:
+                obj = self.__eval_expr(arith_ast.get("op1"))
+                return not obj
+            except:
+                super().error(
+                    ErrorType.TYPE_ERROR,
+                    f"Incompatible type for {arith_ast.elem_type} operation",
+                )
+        else:
+            left_value_obj = self.__eval_expr(arith_ast.get("op1"))
+            right_value_obj = self.__eval_expr(arith_ast.get("op2"))
+            if left_value_obj.type() != right_value_obj.type():
+                super().error(
+                    ErrorType.TYPE_ERROR,
+                    f"Incompatible types for {arith_ast.elem_type} operation",
+                )
+            if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
+                super().error(
+                    ErrorType.TYPE_ERROR,
+                    f"Incompatible operator {arith_ast.get_type} for type {left_value_obj.type()}",
+                )
+            f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
         return f(left_value_obj, right_value_obj)
 
     def __setup_ops(self):
         self.op_to_lambda = {}
         # set up operations on integers
         self.op_to_lambda[Type.INT] = {}
+        self.op_to_lambda[Type.STRING] = {}
+        self.op_to_lambda[Type.BOOL] = {}
         self.op_to_lambda[Type.INT]["+"] = lambda x, y: Value(
             x.type(), x.value() + y.value()
         )
