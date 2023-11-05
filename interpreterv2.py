@@ -10,14 +10,14 @@ class Interpreter(InterpreterBase):
     NIL_VALUE = create_value(InterpreterBase.NIL_DEF)
     TRUE_VALUE = create_value(InterpreterBase.TRUE_DEF)
     FALSE_VALUE = create_value(InterpreterBase.FALSE_DEF)
-    BIN_OPS = {"+", "-"}
+    BIN_OPS = {"+", "-", "*", "/", "==", "<", "<=", ">", ">=", "!=", "||", "&&"}
+    BOOL_OPS = {"==", "<", "<=", ">", ">=", "!=", "||", "&&"}
 
     # methods
     def __init__(self, console_output=True, inp=None, trace_output=False):
         super().__init__(console_output, inp)
         self.trace_output = trace_output
         self.__setup_ops()
-        self.args = []
 
     # run a program that's provided in a string
     # usese the provided Parser found in brewparse.py to parse the program
@@ -49,17 +49,20 @@ class Interpreter(InterpreterBase):
             elif statement.elem_type == "=":
                 self.__assign(statement)
             elif statement.elem_type == InterpreterBase.IF_DEF:
+                if statement.dict["condition"].keys() not in self.BOOL_OPS:
+                    super().error(
+                        ErrorType.TYPE_ERROR, f"Invalid conditional statement"
+                    )
                 ifVal = self.__eval_expr(statement.dict["condition"])
+
                 if ifVal:
-                    for ifStatement in statement.dict["statements"]:
-                        self.__run_statements(ifStatement)
+                    self.__run_statements(statement.dict["statements"])
                 else:
-                    for elseStatement in statement.dict["else_statements"]:
-                        self.__run_statements(elseStatement)
+                    self.__run_statements(statement.dict["else_statements"])
+
             elif statement.elem_type == InterpreterBase.WHILE_DEF:
-                while self.__eval_expr(statement.dict["condition"]):
-                    for whileStatment in statement.dict["statements"]:
-                        self.__run_statements(whileStatment)
+                if self.__eval_expr(statement.dict["condition"]):
+                    self.__run_statements(statement.dict["statements"])
             elif statement.elem_type == InterpreterBase.RETURN_DEF:
                 if statement.dict["expression"] == Interpreter.NIL_VALUE:
                     return None
@@ -83,29 +86,28 @@ class Interpreter(InterpreterBase):
     def __call_print(self, call_ast):
         output = ""
         for arg in call_ast.dict["args"]:
-            if arg.elem_type == InterpreterBase.ARG_DEF:
-                result = self.__eval_expr(arg.dict["name"])  # result is a Value object
-                output = output + get_printable(result)
+            result = self.__eval_expr(arg)  # result is a Value object
+            output = output + get_printable(result)
         super().output(output)
         return Interpreter.NIL_VALUE
 
     def __call_new_func(self, call_ast):
-        for arg in call_ast.dict["args"]:
-            if arg.elem_type == InterpreterBase.ARG_DEF:
-                self.__assign(arg.dict["name"])  # result is a Value object
-        self.__run_statements(call_ast.dict["statements"])
-        for arg in call_ast.dict["args"]:  # Clear arguments
-            if arg.elem_type == InterpreterBase.ARG_DEF:
-                self.env.set(
-                    call_ast.get(arg.dict["name"]), Interpreter.NIL_VALUE
-                )  # result is a Value object
-            return Interpreter.NIL_VALUE
+        func = self.__get_func_by_name(call_ast.dict["name"])
+        for i, arg in enumerate(call_ast.dict["args"]):
+            self.env.set(
+                func.dict["args"][i].dict["name"], self.__eval_expr(arg)
+            )  # result is a Value
+        self.__run_statements(func.dict["statements"])
+        for i, arg in enumerate(call_ast.dict["args"]):
+            self.env.set(
+                func.dict["args"][i], InterpreterBase.NIL_DEF
+            )  # result is a Value object a Value object
+        return Interpreter.NIL_VALUE
 
     def __call_input(self, call_ast):
         args = []
         for arg in call_ast.dict["args"]:
-            if arg.elem_type == InterpreterBase.ARG_DEF:
-                args.append(arg)
+            args.append(arg)
         if args is not None and len(args) == 1:
             result = self.__eval_expr(args[0])
             super().output(get_printable(result))
@@ -120,7 +122,7 @@ class Interpreter(InterpreterBase):
 
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
-        value_obj = self.__eval_expr(assign_ast.get("expression"))
+        value_obj = self.__eval_expr(assign_ast.dict["expression"])
         self.env.set(var_name, value_obj)
 
     def __eval_expr(self, expr_ast):
@@ -145,16 +147,16 @@ class Interpreter(InterpreterBase):
         if arith_ast.elem_type == "neg":
             try:
                 obj = self.__eval_expr(arith_ast.get("op1"))
-                return -obj
+                return Value(obj.type(), -obj.value())
             except:
                 super().error(
                     ErrorType.TYPE_ERROR,
                     f"Incompatible type for {arith_ast.elem_type} operation",
                 )
-        if arith_ast.elem_type == "!":
+        elif arith_ast.elem_type == "!":
             try:
                 obj = self.__eval_expr(arith_ast.get("op1"))
-                return not obj
+                return Value(obj.type(), not obj.value())
             except:
                 super().error(
                     ErrorType.TYPE_ERROR,
@@ -163,7 +165,11 @@ class Interpreter(InterpreterBase):
         else:
             left_value_obj = self.__eval_expr(arith_ast.get("op1"))
             right_value_obj = self.__eval_expr(arith_ast.get("op2"))
-            if left_value_obj.type() != right_value_obj.type():
+            if (
+                left_value_obj.type() == Type.NIL
+                or left_value_obj.type() == Type.NIL
+                or left_value_obj.type() != right_value_obj.type()
+            ):
                 super().error(
                     ErrorType.TYPE_ERROR,
                     f"Incompatible types for {arith_ast.elem_type} operation",
@@ -174,6 +180,10 @@ class Interpreter(InterpreterBase):
                     f"Incompatible operator {arith_ast.get_type} for type {left_value_obj.type()}",
                 )
             f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
+        result = f(left_value_obj, right_value_obj)
+        if result == None:
+            super().error(ErrorType.TYPE_ERROR, f"Invalid comparison")
+
         return f(left_value_obj, right_value_obj)
 
     def __setup_ops(self):
@@ -194,7 +204,6 @@ class Interpreter(InterpreterBase):
         self.op_to_lambda[Type.INT]["/"] = lambda x, y: Value(
             x.type(), x.value() // y.value()
         )
-        self.op_to_lambda[Type.INT]["-"] = lambda x: Value(x.type(), -x.value())
         self.op_to_lambda[Type.INT]["=="] = lambda x, y: Value(
             x.type(), x.value() == y.value()
         )
@@ -219,7 +228,6 @@ class Interpreter(InterpreterBase):
         self.op_to_lambda[Type.BOOL]["&&"] = lambda x, y: Value(
             x.type(), x.value() and y.value()
         )
-        self.op_to_lambda[Type.BOOL]["!"] = lambda x: Value(x.type(), not x.value())
         self.op_to_lambda[Type.BOOL]["=="] = lambda x, y: Value(
             x.type(), x.value() == y.value()
         )
