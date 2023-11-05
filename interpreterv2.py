@@ -117,6 +117,8 @@ class Interpreter(InterpreterBase):
             return Value(Type.INT, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.STRING_DEF:
             return Value(Type.STRING, expr_ast.get("val"))
+        if expr_ast.elem_type == InterpreterBase.BOOL_DEF:
+            return Value(Type.BOOL, expr_ast.get("val"))
         if expr_ast.elem_type == InterpreterBase.VAR_DEF:
             var_name = expr_ast.get("name")
             val = self.env.get(var_name)
@@ -201,5 +203,3 @@ class Interpreter(InterpreterBase):
         self.op_to_lambda[Type.STRING]["!="] = lambda x, y: Value(
             x.type(), x.value() != y.value()
         )
-
-        # add other operators here later for int, string, bool, etc
