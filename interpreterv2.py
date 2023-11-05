@@ -93,7 +93,7 @@ class Interpreter(InterpreterBase):
         for arg in call_ast.dict["args"]:
             if arg.elem_type == InterpreterBase.ARG_DEF:
                 self.__assign(arg.dict["name"])  # result is a Value object
-        self.__run_statements(call_ast["statements"])
+        self.__run_statements(call_ast.dict["statements"])
         for arg in call_ast.dict["args"]:  # Clear arguments
             if arg.elem_type == InterpreterBase.ARG_DEF:
                 self.env.set(
