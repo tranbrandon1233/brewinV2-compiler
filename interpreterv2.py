@@ -11,7 +11,6 @@ class Interpreter(InterpreterBase):
     TRUE_VALUE = create_value(InterpreterBase.TRUE_DEF)
     FALSE_VALUE = create_value(InterpreterBase.FALSE_DEF)
     BIN_OPS = {"+", "-", "*", "/", "==", "<", "<=", ">", ">=", "!=", "||", "&&"}
-    BOOL_OPS = {"==", "<", "<=", ">", ">=", "!=", "||", "&&"}
 
     # methods
     def __init__(self, console_output=True, inp=None, trace_output=False):
@@ -49,20 +48,23 @@ class Interpreter(InterpreterBase):
             elif statement.elem_type == "=":
                 self.__assign(statement)
             elif statement.elem_type == InterpreterBase.IF_DEF:
-                if statement.dict["condition"].keys() not in self.BOOL_OPS:
+                ifVal = self.__eval_expr(statement.dict["condition"])
+                if (
+                    ifVal.type() != Type.BOOL
+                    and ifVal.value() != True
+                    and ifVal.value() != False
+                ):
                     super().error(
                         ErrorType.TYPE_ERROR, f"Invalid conditional statement"
                     )
-                ifVal = self.__eval_expr(statement.dict["condition"])
-
-                if ifVal:
-                    self.__run_statements(statement.dict["statements"])
+                if ifVal.value():
+                    return self.__run_statements(statement.dict["statements"])
                 else:
-                    self.__run_statements(statement.dict["else_statements"])
+                    return self.__run_statements(statement.dict["else_statements"])
 
             elif statement.elem_type == InterpreterBase.WHILE_DEF:
-                if self.__eval_expr(statement.dict["condition"]):
-                    self.__run_statements(statement.dict["statements"])
+                while self.__eval_expr(statement.dict["condition"]).value():
+                    return self.__run_statements(statement.dict["statements"])
             elif statement.elem_type == InterpreterBase.RETURN_DEF:
                 if statement.dict["expression"] == Interpreter.NIL_VALUE:
                     return None
@@ -93,15 +95,19 @@ class Interpreter(InterpreterBase):
 
     def __call_new_func(self, call_ast):
         func = self.__get_func_by_name(call_ast.dict["name"])
+
         for i, arg in enumerate(call_ast.dict["args"]):
             self.env.set(
                 func.dict["args"][i].dict["name"], self.__eval_expr(arg)
             )  # result is a Value
+
         self.__run_statements(func.dict["statements"])
+        """
         for i, arg in enumerate(call_ast.dict["args"]):
             self.env.set(
                 func.dict["args"][i], InterpreterBase.NIL_DEF
             )  # result is a Value object a Value object
+            """
         return Interpreter.NIL_VALUE
 
     def __call_input(self, call_ast):
