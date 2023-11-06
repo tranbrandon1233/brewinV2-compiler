@@ -17,6 +17,8 @@ class Interpreter(InterpreterBase):
         super().__init__(console_output, inp)
         self.trace_output = trace_output
         self.__setup_ops()
+        self.overloadCount = 2
+        self.argNames = []
 
     # run a program that's provided in a string
     # usese the provided Parser found in brewparse.py to parse the program
@@ -31,7 +33,13 @@ class Interpreter(InterpreterBase):
     def __set_up_function_table(self, ast):
         self.func_name_to_ast = {}
         for func_def in ast.get("functions"):
-            self.func_name_to_ast[func_def.get("name")] = func_def
+            if func_def.get("name") not in self.func_name_to_ast:
+                self.func_name_to_ast[func_def.get("name")] = func_def
+            else:  # Handle overloaded funcs
+                self.func_name_to_ast[
+                    func_def.get("name") + str(self.overloadCount)
+                ] = func_def
+                self.overloadCount += 1
 
     def __get_func_by_name(self, name):
         if name not in self.func_name_to_ast:
@@ -89,7 +97,12 @@ class Interpreter(InterpreterBase):
         output = ""
         for arg in call_ast.dict["args"]:
             result = self.__eval_expr(arg)  # result is a Value object
-            output = output + get_printable(result)
+            if not isinstance(result, str):
+                output = output + get_printable(result)
+            else:
+                output = output + result
+        if output is "nil":
+            super().error(ErrorType.NAME_ERROR, "Variable does not exist.")
         super().output(output)
         return Interpreter.NIL_VALUE
 
@@ -100,14 +113,18 @@ class Interpreter(InterpreterBase):
             self.env.set(
                 func.dict["args"][i].dict["name"], self.__eval_expr(arg)
             )  # result is a Value
-
+            self.argNames.append(func.dict["args"][i].dict["name"])
+        for j in range(2, self.overloadCount):  # Repeat for overloaded funcs
+            func = self.__get_func_by_name(call_ast.dict["name"] + str(j))
+            for i, arg in enumerate(call_ast.dict["args"]):
+                self.env.set(func.dict["args"][i].dict["name"], self.__eval_expr(arg))
+                self.argNames.append(func.dict["args"][i].dict["name"])
         self.__run_statements(func.dict["statements"])
-        """
-        for i, arg in enumerate(call_ast.dict["args"]):
+        for arg in self.argNames:
             self.env.set(
-                func.dict["args"][i], InterpreterBase.NIL_DEF
+                arg, InterpreterBase.NIL_DEF
             )  # result is a Value object a Value object
-            """
+
         return Interpreter.NIL_VALUE
 
     def __call_input(self, call_ast):
@@ -129,6 +146,7 @@ class Interpreter(InterpreterBase):
     def __assign(self, assign_ast):
         var_name = assign_ast.get("name")
         value_obj = self.__eval_expr(assign_ast.dict["expression"])
+        self.argNames.append(var_name)
         self.env.set(var_name, value_obj)
 
     def __eval_expr(self, expr_ast):
@@ -157,7 +175,7 @@ class Interpreter(InterpreterBase):
             except:
                 super().error(
                     ErrorType.TYPE_ERROR,
-                    f"Incompatible type for {arith_ast.elem_type} operation",
+                    f"Incompatible type for operation",
                 )
         elif arith_ast.elem_type == "!":
             try:
@@ -166,24 +184,26 @@ class Interpreter(InterpreterBase):
             except:
                 super().error(
                     ErrorType.TYPE_ERROR,
-                    f"Incompatible type for {arith_ast.elem_type} operation",
+                    f"Incompatible types for operation",
                 )
         else:
             left_value_obj = self.__eval_expr(arith_ast.get("op1"))
             right_value_obj = self.__eval_expr(arith_ast.get("op2"))
             if (
-                left_value_obj.type() == Type.NIL
-                or left_value_obj.type() == Type.NIL
+                left_value_obj == None
+                or right_value_obj == None
+                or left_value_obj.type() is "nil"
+                or right_value_obj.type() is "nil"
                 or left_value_obj.type() != right_value_obj.type()
             ):
                 super().error(
                     ErrorType.TYPE_ERROR,
-                    f"Incompatible types for {arith_ast.elem_type} operation",
+                    f"Incompatible types for operation",
                 )
             if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
                 super().error(
                     ErrorType.TYPE_ERROR,
-                    f"Incompatible operator {arith_ast.get_type} for type {left_value_obj.type()}",
+                    f"Incompatible operator.",
                 )
             f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
         result = f(left_value_obj, right_value_obj)
