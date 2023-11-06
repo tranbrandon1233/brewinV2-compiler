@@ -189,28 +189,38 @@ class Interpreter(InterpreterBase):
         else:
             left_value_obj = self.__eval_expr(arith_ast.get("op1"))
             right_value_obj = self.__eval_expr(arith_ast.get("op2"))
-            if (
+            try:
                 left_value_obj == None
-                or right_value_obj == None
-                or left_value_obj.type() is "nil"
-                or right_value_obj.type() is "nil"
-                or left_value_obj.type() != right_value_obj.type()
-            ):
+                right_value_obj == None
+                left_value_obj.type() is "nil"
+                right_value_obj.type() is "nil"
+                left_value_obj.type() != right_value_obj.type()
+            except:
                 super().error(
                     ErrorType.TYPE_ERROR,
                     f"Incompatible types for operation",
                 )
-            if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
+            if (
+                left_value_obj.type() != "nil"
+                and right_value_obj.type() != "nil"
+                and left_value_obj.type() == right_value_obj.type()
+            ):
+                if arith_ast.elem_type not in self.op_to_lambda[left_value_obj.type()]:
+                    super().error(
+                        ErrorType.TYPE_ERROR,
+                        f"Incompatible operator.",
+                    )
+                f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
+                result = f(left_value_obj, right_value_obj)
+                if result == None:
+                    super().error(ErrorType.TYPE_ERROR, f"Invalid comparison")
+
+                return f(left_value_obj, right_value_obj)
+            else:
                 super().error(
                     ErrorType.TYPE_ERROR,
-                    f"Incompatible operator.",
+                    f"Incompatible types for operation",
                 )
-            f = self.op_to_lambda[left_value_obj.type()][arith_ast.elem_type]
-        result = f(left_value_obj, right_value_obj)
-        if result == None:
-            super().error(ErrorType.TYPE_ERROR, f"Invalid comparison")
-
-        return f(left_value_obj, right_value_obj)
 
     def __setup_ops(self):
         self.op_to_lambda = {}
